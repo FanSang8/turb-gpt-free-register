@@ -16,3 +16,6 @@ REGISTER_PASSWORD = ""
 # OpenAI 限制：name_invalid_chars —— 只允许字母和空格
 REGISTER_NAME = ""
 
+# Private 外部控制接口鉴权。也可以通过环境变量 REGISTER_CONTROL_TOKEN 提供。
+REGISTER_CONTROL_TOKEN = ""
+

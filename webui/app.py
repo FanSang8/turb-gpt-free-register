@@ -18,6 +18,9 @@ from flask import Flask, Response, jsonify, render_template, request
 
 from core import db
 from core import registration_service as svc
+from core.external_control import authorize as authorize_external_control
+from core.external_control import configured as external_control_configured
+from core.external_control import external_register_controller
 from webui import config_editor
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,14 @@ def _with_pool_source(rows: list[dict], source: str) -> list[dict]:
 def _codex_retry_log_path(email: str) -> Path:
     safe = email.replace("/", "_").replace("\\", "_").replace(":", "_")
     return _LOG_DIR / f"codex-retry-{safe}.log"
+
+
+def _external_control_token() -> str:
+    authorization = str(request.headers.get("Authorization") or "")
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() == "bearer" and value.strip():
+        return value.strip()
+    return str(request.headers.get("X-Register-Control-Token") or "").strip()
 
 
 def create_app() -> Flask:
@@ -750,6 +761,25 @@ def create_app() -> Flask:
     # ----------------------------------------------------------
     # 注册任务
     # ----------------------------------------------------------
+    @app.get("/api/external/control/status")
+    def api_external_control_status():
+        if not external_control_configured():
+            return jsonify({"ok": False, "error": "external control token is not configured"}), 503
+        if not authorize_external_control(_external_control_token()):
+            return jsonify({"ok": False, "error": "invalid external control token"}), 401
+        return jsonify({"ok": True, "control": external_register_controller.status()})
+
+    @app.post("/api/external/control/reconcile")
+    def api_external_control_reconcile():
+        if not external_control_configured():
+            return jsonify({"ok": False, "error": "external control token is not configured"}), 503
+        if not authorize_external_control(_external_control_token()):
+            return jsonify({"ok": False, "error": "invalid external control token"}), 401
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"ok": False, "error": "JSON object is required"}), 400
+        return jsonify({"ok": True, "control": external_register_controller.reconcile(data)})
+
     @app.get("/api/jobs")
     def api_jobs():
         limit = request.args.get("limit", default=100, type=int)
