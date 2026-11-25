@@ -63,6 +63,13 @@ def exercise(headless):
         traffic = driver.proxy_transport_snapshot()
         assert traffic["total_bytes"] > 0
         assert opened.raw["driver"] == "camoufox"
+        kept = driver
+        driver, _ = build_camoufox_driver(
+            f"http://smoke:password@127.0.0.1:{server.server_port}",
+        )
+        assert kept._manager is None
+        driver.get("http://camoufox.test/replacement")
+        assert driver.execute_script("return document.title;") == "Camoufox smoke"
         driver.quit()
         driver = None
         try:

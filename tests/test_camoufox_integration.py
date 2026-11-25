@@ -71,6 +71,17 @@ def test_quit_stops_manager_and_relay_even_if_context_close_fails(runtime):
     runtime.relay.close.assert_called_once()
 
 
+def test_next_session_closes_debug_browser_on_same_worker(runtime):
+    first, _ = backend.build_camoufox_driver("")
+    runtime.opener.return_value = ("", None)
+    second, _ = backend.build_camoufox_driver("")
+    assert first._manager is None
+    assert second._manager is runtime.manager
+    assert runtime.manager.__exit__.call_count == 1
+    second.quit()
+    assert runtime.manager.__exit__.call_count == 2
+
+
 @pytest.mark.parametrize("proxy,use_proxy", [("", True), (None, False)])
 def test_explicit_direct_never_picks_proxy(runtime, monkeypatch, proxy, use_proxy):
     from config import proxy as proxy_cfg

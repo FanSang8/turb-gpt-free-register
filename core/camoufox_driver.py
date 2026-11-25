@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 import uuid
 
 from config import camoufox as _cfg
 from core.cloakbrowser_driver import CloakOpenResult, CloakSeleniumDriver
 
 logger = logging.getLogger(__name__)
+_thread_state = threading.local()
 
 
 class CamoufoxSeleniumDriver(CloakSeleniumDriver):
@@ -35,10 +37,21 @@ class CamoufoxSeleniumDriver(CloakSeleniumDriver):
             relay, self._proxy_relay = self._proxy_relay, None
             if relay is not None:
                 relay.close()
+            if getattr(_thread_state, "driver", None) is self:
+                del _thread_state.driver
 
 
 def build_camoufox_driver(proxy: str | None = None):
     """None selects the pool; an empty string explicitly disables the proxy."""
+    # A kept debug browser still owns this worker's Playwright sync event loop.
+    # Release it before reusing the worker for its next browser session.
+    previous = getattr(_thread_state, "driver", None)
+    if previous is not None:
+        logger.info("[Camoufox] 关闭此工作线程上次保留的调试浏览器")
+        try:
+            previous.quit()
+        except Exception:
+            logger.debug("[Camoufox] 清理上次调试浏览器失败", exc_info=True)
     relay = None
     manager = None
     entered = False
@@ -83,6 +96,7 @@ def build_camoufox_driver(proxy: str | None = None):
             manager=manager, browser=browser, context=context, page=page, proxy_relay=relay,
         )
         driver.set_page_load_timeout(max(1, int(_cfg.CAMOUFOX_TIMEOUT)))
+        _thread_state.driver = driver
         return driver, CloakOpenResult(
             profile_id=f"camoufox-{uuid.uuid4().hex}",
             raw={"driver": "camoufox", "proxy": proxy_url or "",

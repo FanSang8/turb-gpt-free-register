@@ -201,7 +201,7 @@ EDITABLE_FIELDS = [
     },
     {
         "key": "CAMOUFOX_KEEP_BROWSER_OPEN", "file": "camoufox.py", "type": "bool", "group": "Camoufox",
-        "label": "保留 Camoufox 浏览器", "help": "调试时不自动关闭；仅推送模式始终关闭",
+        "label": "保留 Camoufox 浏览器", "help": "调试时保留到此工作线程的下次 Camoufox 任务；仅推送模式始终关闭",
     },
 
     # ---- Browser Use Cloud ----
