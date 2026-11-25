@@ -2613,6 +2613,13 @@ def create_app(auth_code: str | None = None) -> Flask:
             return jsonify({"ok": False, "error": "workers 非法"}), 400
 
         # 提交前先确认池里有足够可用邮箱，给前端一个温和提示（不阻断）
+        from config import push_to_api as _push_cfg
+        if _push_cfg.REGISTER_PUSH_ONLY:
+            from core.push_to_api import validate_push_config
+            try:
+                validate_push_config()
+            except ValueError as exc:
+                return jsonify({"ok": False, "error": str(exc)}), 400
         from config import email as _email_cfg
         from config import register as _register_cfg
         from core.email_provider import parse_email_sources
@@ -2943,6 +2950,16 @@ def create_app(auth_code: str | None = None) -> Flask:
     def api_config_get():
         return jsonify(config_editor.get_config())
 
+    @app.get("/api/remail/status")
+    def api_remail_status():
+        from core.remail_manager import remail_manager
+        return jsonify({"ok": True, **remail_manager.status()})
+
+    @app.post("/api/remail/reset-circuit")
+    def api_remail_reset_circuit():
+        from core.remail_manager import remail_manager
+        return jsonify({"ok": True, **remail_manager.reset_circuit()})
+
     @app.get("/api/sms/tiger/catalog")
     def api_tiger_sms_catalog():
         """只读查询项目及项目下有库存的国家，不触发取号或扣费。"""
@@ -3071,6 +3088,10 @@ def create_app(auth_code: str | None = None) -> Flask:
         try:
             import config as _config_pkg
             _config_pkg.reload_all()
+            from config import remail as _remail_cfg
+            if updates.get("REMAIL_ENABLED") in (True, "True", "true", "1") and _remail_cfg.REMAIL_ENABLED:
+                from core.remail_manager import remail_manager
+                remail_manager.reset_circuit()
             from core import twofa_service
             twofa_service.apply_settings()
         except Exception as exc:

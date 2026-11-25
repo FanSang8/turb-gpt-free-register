@@ -24,6 +24,8 @@ EXPLICIT_EMPTY_STRING_ENV_KEYS = {"GENERIC_API_PROXY"}
 
 # 统一管理：env key -> 说明（.env.example 用）
 SECRET_ENV_KEYS: dict[str, str] = {
+    "PUSH_API_TOKEN": "账号推送管理员 Key",
+    "REMAIL_FEISHU_WEBHOOK_URL": "Remail 采购告警 Webhook",
     "WEBUI_AUTH_CODE": "WebUI 登录授权码",
     "WEBUI_SESSION_SECRET": "WebUI Session Cookie 签名密钥",
     "BROWSER_USE_API_KEY": "Browser Use Cloud API Key",

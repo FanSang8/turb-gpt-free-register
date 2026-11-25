@@ -337,8 +337,12 @@ def _run_one_job(job_id: int, log_file: str) -> None:
                 on_email_acquired=_on_email_acquired,
                 **({"resume_registration": True} if resume else {}),
             )
+            if isinstance(result, dict) and result.get("push"):
+                db.update_job(job_id, push=result["push"],
+                              registration_success=result.get("registration_success", False))
             if is_stop_requested(job_id):
-                _release_unconsumed_job_email(email, "用户手动停止")
+                if not (isinstance(result, dict) and result.get("registration_success")):
+                    _release_unconsumed_job_email(email, "用户手动停止")
                 _finish_active_job(
                     job_id,
                     status="stopped",
@@ -360,7 +364,7 @@ def _run_one_job(job_id: int, log_file: str) -> None:
                 if finished == 'success':
                     log_logger.info(f"[Job {job_id}] 成功: {result.get('email')}")
                 elif finished == 'stopped':
-                    log_logger.warning(f"[Job {job_id}] 收尾前收到停止信号，凭证保留，任务已停止")
+                    log_logger.warning(f"[Job {job_id}] 收尾前收到停止信号，任务已停止，推送结果见任务记录")
             else:
                 # 注意：失败也可能伴随 account_id（如 Codex 失败但账号已注册成功）
                 err = (result or {}).get("error") if isinstance(result, dict) else "unknown"
@@ -375,7 +379,9 @@ def _run_one_job(job_id: int, log_file: str) -> None:
                     completed_at=datetime.now().isoformat(timespec="seconds"),
                 )
                 email_to_handle = str(result_email or email or "").strip()
-                if not resume and _should_disable_failed_registration_email(err):
+                if isinstance(result, dict) and result.get("registration_success"):
+                    pass  # The remote account exists even if its push failed.
+                elif not resume and _should_disable_failed_registration_email(err):
                     _disable_job_email(email_to_handle, str(err))
                 else:
                     _release_unconsumed_job_email(email_to_handle, str(err))
@@ -596,6 +602,9 @@ def get_retry_info(job: dict, *, context: dict | None = None) -> dict:
         "display_status": status,
     }
     if status not in ("failed", "stopped", "cancelled"):
+        return info
+    if job.get("registration_success") and job.get("account_id") is None:
+        info["retry_reason"] = "账号已注册，凭证已按推送模式释放，不能重新注册或补推"
         return info
 
     successful_retry = (context.get('successful_retry') if context is not None

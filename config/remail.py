@@ -1,0 +1,23 @@
+"""Durable purchasing defaults, shared with register-deploy."""
+from config import email as _email
+from config.env_loader import apply_env_overrides
+
+# Selecting the remail source is still required before any purchase.
+REMAIL_ENABLED = True
+REMAIL_BASE_URL = _email.REMAIL_API_BASE
+REMAIL_API_KEY = _email.REMAIL_API_KEY
+REMAIL_PROJECT_ID = _email.REMAIL_PROJECT_ID
+REMAIL_EMAIL_SUFFIX = _email.REMAIL_EMAIL_SUFFIX
+REMAIL_SERVICE_MODE = _email.REMAIL_SERVICE_MODE
+REMAIL_REQUEST_TIMEOUT_SECONDS = _email.REMAIL_REQUEST_TIMEOUT
+REMAIL_PRODUCT_ID = 0
+REMAIL_EXPECTED_UNIT_POINTS = 10
+REMAIL_PURCHASE_BATCH_SIZE = 4
+REMAIL_MAX_PURCHASE_PER_ROUND = 8
+REMAIL_LOW_BALANCE_POINTS = 200
+REMAIL_LOW_BALANCE_ACTION = "notify_only"
+REMAIL_LOW_BALANCE_ALERT_INTERVAL_SECONDS = 600
+REMAIL_PURCHASE_RECOVERY_WINDOW_SECONDS = 300
+REMAIL_FEISHU_WEBHOOK_URL = ""
+
+apply_env_overrides(globals())

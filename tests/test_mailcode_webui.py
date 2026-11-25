@@ -9,6 +9,9 @@ from core.mailcode_client import MailCodeError
 
 class MailCodeWebUiTests(unittest.TestCase):
     def setUp(self):
+        setting = patch("config.push_to_api.PUSH_API_URL", "https://receiver.example")
+        setting.start()
+        self.addCleanup(setting.stop)
         self.client = create_app(auth_code="test-auth").test_client()
         self.client.environ_base["HTTP_X_AUTH_CODE"] = "test-auth"
 

@@ -13,6 +13,7 @@ from typing import Callable
 from config import roxybrowser as _cfg
 from config import twofa as _twofa_cfg
 from core.account_export import save_account_data, post_register_dwell
+from core.registration_output import capture_account, ephemeral_registration
 from core.browser_data_saver import BrowserDataSaver
 from core.browser_traffic import SeleniumTrafficTracker, merge_proxy_transport_traffic
 from core.roxy_asset_cache import RoxyLocalAssetCache
@@ -2478,12 +2479,17 @@ def run_roxy_registration(
         session_info = _fetch_chatgpt_session(driver, timeout=120)
         _traffic_checkpoint()
         access_token = session_info["accessToken"]
+        if ephemeral_registration():
+            capture_account(
+                email=email, access_token=access_token, email_source=resolve_email_source(email),
+                proxy_used=((opened.raw or {}).get("proxy_pool_target") if opened else None) or proxy or None,
+            )
         logger.info("[Roxy注册] 已拿到 accessToken：%s", email)
         _check_manual_stop()
         # 已拿到 accessToken 后不再需要 ChatGPT 应用壳；Codex 复用当前窗口时保留完整页面。
         try:
             from config import codex as _codex_deep_cfg
-            if not bool(getattr(_codex_deep_cfg, "ENABLE_CODEX_AUTO", False)) and data_saver is not None:
+            if (ephemeral_registration() or not bool(getattr(_codex_deep_cfg, "ENABLE_CODEX_AUTO", False))) and data_saver is not None:
                 data_saver.enable_post_auth_deep_mode(driver)
                 # 不需要 Codex 时切到本地空白页，停止 ChatGPT SPA 的轮询、遥测
                 # 和懒加载资源；accessToken 已经在上一步落盘所需数据中取得。
@@ -2506,7 +2512,7 @@ def run_roxy_registration(
         }
         try:
             from config import codex as _codex_cfg
-            if bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
+            if not ephemeral_registration() and bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
                 # 注册流程本身已创建 Roxy 一号一环境。这里不能再新建第二个 Roxy 环境；
                 # 复用当前注册窗口，先清理 Cookie/session/localStorage/cache，再开始 Codex 授权。
                 from core.roxy_codex_oauth import run_roxy_codex_oauth
@@ -2527,7 +2533,8 @@ def run_roxy_registration(
             codex_result = {"status": "failed", "ok": False, "message": f"{type(exc).__name__}: {str(exc)[:180]}"}
 
         # 统计注册浏览器关闭前的完整会话；注册后停留期间的网络请求也计入。
-        post_register_dwell(email, label="Roxy注册")
+        if not ephemeral_registration():
+            post_register_dwell(email, label="Roxy注册")
         _traffic_checkpoint()
         if asset_cache is not None:
             asset_cache_snapshot = asset_cache.stop()
@@ -2586,7 +2593,7 @@ def run_roxy_registration(
         logger.debug("[Roxy注册] 失败详情", exc_info=True)
         # 未确认创建前回收邮箱；确认后避免重复使用。
         try:
-            if email:
+            if email and not (ephemeral_registration() and locals().get("access_token")):
                 from core.email_provider import release_email
                 release_email(email, status="failed" if create_acknowledged else "available", note=f"Roxy注册失败: {str(exc)[:180]}")
         except Exception:
@@ -2610,10 +2617,10 @@ def run_roxy_registration(
                 pass
         if data_saver is not None:
             data_saver.stop()
-        if driver and not bool(_cfg.ROXY_KEEP_BROWSER_OPEN):
+        if driver and (ephemeral_registration() or not bool(_cfg.ROXY_KEEP_BROWSER_OPEN)):
             try:
                 driver.quit()
             except Exception:
                 pass
-        if not bool(_cfg.ROXY_KEEP_BROWSER_OPEN):
+        if ephemeral_registration() or not bool(_cfg.ROXY_KEEP_BROWSER_OPEN):
             client.cleanup_profile(opened)

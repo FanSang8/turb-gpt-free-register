@@ -207,6 +207,8 @@ _RELOADABLE_SUBMODULES = (
     "config.proxy",
     "config.register",
     "config.email",
+    "config.remail",
+    "config.push_to_api",
     "config.twofa",
     "config.roxybrowser",
     "config.cloakbrowser",

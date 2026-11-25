@@ -27,6 +27,9 @@ import requests
 
 from config import email as _email_cfg
 from core.otp_utils import extract_otp
+from core.remail_openapi import (
+    RemailError, RemailAmbiguousPurchaseError, RemailClient, RemailProduct, decimal_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +37,6 @@ DEFAULT_API_BASE = "https://remail.aishop6.com"
 REQUEST_TIMEOUT = 20
 _CODE_RE = re.compile(r"\b(\d{6})\b")
 _FINAL_ORDER_STATUSES = {"failed", "refunded", "closed"}
-
-
-class RemailError(RuntimeError):
-    """Remail API 请求、下单或取码失败。"""
 
 
 # 兼容调用方可能使用的命名。
@@ -53,6 +52,8 @@ class RemailAccount:
     order_no: str
     project_id: int
     email_suffix: str
+    base_email: str = ""
+    reservation_id: str = ""
 
 
 _CONTEXT_CACHE: dict[str, RemailAccount] = {}
@@ -351,6 +352,8 @@ def get_account_context_metadata(email: str) -> dict | None:
         "order_no": account.order_no,
         "project_id": account.project_id,
         "email_suffix": account.email_suffix,
+        "base_email": account.base_email,
+        "reservation_id": account.reservation_id,
     }
 
 
@@ -384,6 +387,8 @@ def restore_account_context(email: str) -> RemailAccount | None:
         }
         account = _context_from_order(order, target)
         if account is not None:
+            account.base_email = str(metadata.get("base_email") or "")
+            account.reservation_id = str(metadata.get("reservation_id") or "")
             logger.info(
                 "[Remail] 已从账号保存信息恢复取件上下文: %s order=%s",
                 target,
@@ -516,7 +521,7 @@ def _wait_for_order_credentials(order: dict) -> tuple[str, str, str]:
     raise RemailError(f"Remail 订单等待 service token 超时: order={order_no}, status={status}")
 
 
-def pick_account() -> RemailAccount:
+def _pick_single_account() -> RemailAccount:
     """按配置创建一个 Remail 接码/长效购买订单并返回交付邮箱。"""
     project_id = _project_id()
     email_suffix = _email_suffix()
@@ -545,6 +550,54 @@ def pick_account() -> RemailAccount:
     return account
 
 
+def pick_account() -> RemailAccount:
+    from config import remail as cfg
+    if not cfg.REMAIL_ENABLED:
+        raise RemailError("Remail 自动采购管理已关闭")
+    from core.remail_manager import remail_manager
+    from core.registration_service import _THREAD_CTX
+    from core import db
+
+    _check_task_stop()
+    reservations = remail_manager.prepare_reservations(1)
+    if not reservations:
+        status = remail_manager.status()
+        raise RemailError(status.get("last_purchase_error") or
+                          status.get("purchase_circuit_reason") or "Remail 暂无可用邮箱")
+    reservation = reservations[0]
+    reservation_id = reservation["reservation_id"]
+    started = False
+    try:
+        _check_task_stop()
+        job_id = int(getattr(_THREAD_CTX, "job_id", None) or 0)
+        remail_manager.bind_reservation(reservation_id, job_id)
+        if job_id:
+            if not db.update_job(job_id, mailbox_reservation_id=reservation_id,
+                                 email_source="remail", expected_statuses=("running",)):
+                raise RemailError("任务已停止，释放 Remail 邮箱")
+        remail_manager.mark_running(reservation_id, job_id)
+        started = True
+        context = remail_manager.context_for_email(reservation["email"])
+        if not context:
+            raise RemailError("Remail 已分配邮箱缺少取件上下文")
+        from urllib.parse import parse_qs
+        token = parse_qs(urlsplit(context["code_url"]).query)["token"][0]
+        account = RemailAccount(
+            email=reservation["email"], service_token=token,
+            order_no=reservation["remail_order_no"], project_id=_project_id(),
+            email_suffix=_email_suffix(), base_email=reservation["base_email"],
+            reservation_id=reservation_id,
+        )
+        logger.info("[Remail] 已分配邮箱: %s kind=%s", account.email, reservation["address_kind"])
+        return _cache_context(account)
+    except BaseException:
+        if started:
+            remail_manager.finish_reservation(reservation_id, success=False, note="邮箱分配中断")
+        else:
+            remail_manager.release_reservation(reservation_id, note="分配前任务停止")
+        raise
+
+
 def get_email() -> str:
     """兼容其他临时邮箱客户端的旧入口。"""
     return pick_account().email
@@ -560,6 +613,13 @@ def release_account(email: str, status: str = "available", note: str | None = No
     with _CONTEXT_LOCK:
         account = _CONTEXT_CACHE.pop(_cache_key(email), None)
     if account:
+        if account.reservation_id:
+            from core.remail_manager import remail_manager
+            # Once returned to a browser, a mailbox may have reached the remote
+            # signup service. Only never-started reservations are reusable.
+            remail_manager.finish_reservation(
+                account.reservation_id, success=status == "used", note=note or status,
+            )
         logger.info(
             "[Remail] 已释放取件上下文: %s order=%s status=%s note=%s",
             email,
@@ -674,7 +734,7 @@ def fetch_latest_otp(
             payload = _request(
                 "GET",
                 "/v1/pickup",
-                params={"email": target, "token": account.service_token},
+                params={"email": account.base_email or target, "token": account.service_token},
                 authenticated=False,
             )
             items = _pickup_items(payload)

@@ -29,7 +29,7 @@ class RemailClientTests(unittest.TestCase):
         ), patch.object(email_config, "REMAIL_SERVICE_MODE", "code", create=True), patch.object(
             email_config, "REMAIL_SUPPLY_POLICY", "private_first", create=True
         ):
-            account = remail_client.pick_account()
+            account = remail_client._pick_single_account()
 
         self.assertEqual(account.email, "fresh@outlook.test")
         self.assertEqual(account.service_token, "st-test-token")
@@ -64,7 +64,7 @@ class RemailClientTests(unittest.TestCase):
         ), patch.object(email_config, "REMAIL_EMAIL_SUFFIX", "outlook.com", create=True), patch.object(
             email_config, "REMAIL_SERVICE_MODE", "code", create=True
         ), patch.object(email_config, "REMAIL_ORDER_WAIT_SECONDS", 1, create=True):
-            account = remail_client.pick_account()
+            account = remail_client._pick_single_account()
 
         self.assertEqual(account.email, "fresh@outlook.test")
         self.assertEqual(
@@ -191,7 +191,7 @@ class RemailClientTests(unittest.TestCase):
             email_config, "REMAIL_PROJECT_ID", 0, create=True
         ):
             with self.assertRaisesRegex(remail_client.RemailError, "项目 ID"):
-                remail_client.pick_account()
+                remail_client._pick_single_account()
 
     def test_release_account_clears_cached_context(self):
         remail_client._CONTEXT_CACHE["fresh@outlook.test"] = remail_client.RemailAccount(

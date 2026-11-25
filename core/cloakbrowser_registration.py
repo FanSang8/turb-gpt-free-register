@@ -10,6 +10,7 @@ from typing import Callable
 from config import cloakbrowser as _cfg
 from config import twofa as _twofa_cfg
 from core.account_export import save_account_data, post_register_dwell
+from core.registration_output import ephemeral_registration
 from core.browser_data_saver import BrowserDataSaver
 from core.browser_traffic import PlaywrightTrafficTracker, merge_proxy_transport_traffic
 from core.cloakbrowser_driver import build_cloak_driver
@@ -145,7 +146,7 @@ def run_cloak_registration(
         }
         try:
             from config import codex as _codex_cfg
-            if bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
+            if not ephemeral_registration() and bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
                 from core.roxy_codex_oauth import run_roxy_codex_oauth
                 logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=True，复用当前 CloakBrowser 窗口执行 Codex 授权")
                 _check_manual_stop()
@@ -163,7 +164,8 @@ def run_cloak_registration(
             codex_result = {"status": "failed", "ok": False, "message": f"{type(exc).__name__}: {str(exc)[:180]}"}
 
         # 统计注册浏览器关闭前的完整会话；注册后停留期间的网络请求也计入。
-        post_register_dwell(email, label="Cloak注册")
+        if not ephemeral_registration():
+            post_register_dwell(email, label="Cloak注册")
         if traffic_tracker is not None:
             network_traffic = traffic_tracker.stop()
         network_traffic = merge_proxy_transport_traffic(network_traffic, driver.proxy_transport_snapshot(), label="Cloak")
@@ -229,7 +231,7 @@ def run_cloak_registration(
                 pass
         if data_saver is not None:
             data_saver.stop()
-        if driver and not bool(_cfg.CLOAK_KEEP_BROWSER_OPEN):
+        if driver and (ephemeral_registration() or not bool(_cfg.CLOAK_KEEP_BROWSER_OPEN)):
             try:
                 driver.quit()
             except Exception:

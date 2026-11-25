@@ -133,18 +133,13 @@ def _first(payload: dict, paths: list[tuple[str, ...]]) -> str:
     return ""
 
 
-def _workspace_id_value() -> str | int:
-    raw = str(getattr(_cfg, "ROXY_WORKSPACE_ID", "") or "").strip()
-    if not raw:
-        return ""
-    return int(raw) if raw.isdigit() else raw
+def _workspace_id_value() -> str:
+    # Roxy's JavaScript service loses precision when long IDs arrive as numbers.
+    return str(getattr(_cfg, "ROXY_WORKSPACE_ID", "") or "").strip()
 
 
-def _project_id_value() -> str | int:
-    raw = str(getattr(_cfg, "ROXY_PROJECT_ID", "") or "").strip()
-    if not raw:
-        return ""
-    return int(raw) if raw.isdigit() else raw
+def _project_id_value() -> str:
+    return str(getattr(_cfg, "ROXY_PROJECT_ID", "") or "").strip()
 
 
 def _apply_data_saver_open_args(params: dict) -> dict:
@@ -549,7 +544,7 @@ class RoxyBrowserClient:
         params = dict(getattr(_cfg, "ROXY_OPEN_EXTRA_PARAMS", {}) or {})
         # Roxy 官方 /browser/open body: {workspaceId, dirId, args, forceOpen, headless}
         params.setdefault("workspaceId", _workspace_id_value())
-        params.setdefault("dirId", int(pid) if str(pid).isdigit() else pid)
+        params.setdefault("dirId", str(pid))
         params.setdefault("args", [])
         params.setdefault("forceOpen", True)
         _apply_data_saver_open_args(params)
@@ -596,7 +591,7 @@ class RoxyBrowserClient:
         try:
             body = {
                 "workspaceId": _workspace_id_value(),
-                "dirId": int(profile_id) if str(profile_id).isdigit() else profile_id,
+                "dirId": str(profile_id),
             }
             self.request(
                 _cfg.ROXY_CLOSE_METHOD,
@@ -616,7 +611,7 @@ class RoxyBrowserClient:
         try:
             body = {
                 "workspaceId": _workspace_id_value(),
-                "dirIds": [int(profile_id) if str(profile_id).isdigit() else profile_id],
+                "dirIds": [str(profile_id)],
             }
             self.request(
                 method,
@@ -630,7 +625,9 @@ class RoxyBrowserClient:
 
     def cleanup_profile(self, opened: RoxyOpenResult | None) -> None:
         """任务结束清理：关闭窗口；一号一环境时删除本轮创建的 Profile。"""
-        keep_open = bool(getattr(_cfg, "ROXY_KEEP_BROWSER_OPEN", False))
+        from core.registration_output import ephemeral_registration
+        ephemeral = ephemeral_registration()
+        keep_open = not ephemeral and bool(getattr(_cfg, "ROXY_KEEP_BROWSER_OPEN", False))
         try:
             if not opened or not opened.profile_id:
                 return
@@ -638,8 +635,10 @@ class RoxyBrowserClient:
                 self.close_profile(opened.profile_id)
 
             should_delete = (
-                bool(getattr(_cfg, "ROXY_ONE_PROFILE_PER_ACCOUNT", True))
-                and bool(getattr(_cfg, "ROXY_DELETE_PROFILE_AFTER_RUN", True))
+                (ephemeral or (
+                    bool(getattr(_cfg, "ROXY_ONE_PROFILE_PER_ACCOUNT", True))
+                    and bool(getattr(_cfg, "ROXY_DELETE_PROFILE_AFTER_RUN", True))
+                ))
                 and bool(opened.created_by_run)
             )
             if should_delete:

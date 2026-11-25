@@ -92,3 +92,5 @@ webui.log
 webui.pid
 logs/
 run/
+remail_state.json
+remail_state.json.tmp

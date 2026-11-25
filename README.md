@@ -1,5 +1,9 @@
 # Turb GPT Free Register
 
+默认采用注册后推送模式，不保存新注册账号凭证。请先配置推送 URL 和 Key。
+Remail 采购、主/子地址分配和订单恢复已迁入，使用方式见
+[注册推送配置](docs/registration-push.md)。
+
 ChatGPT / OpenAI 账号自动注册与 Codex OAuth 授权工具。当前项目支持三套注册驱动：
 
 - **protocol**：原纯协议注册，可选 `curl_cffi` / `wreq` + Sentinel/PoW。

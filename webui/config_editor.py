@@ -34,6 +34,27 @@ EXPLICIT_EMPTY_STRING_KEYS = {
 # ============================================================
 
 EDITABLE_FIELDS = [
+    {
+        "key": "REGISTER_PUSH_ONLY", "file": "push_to_api.py", "type": "bool", "group": "账号推送",
+        "label": "注册后仅推送", "help": "默认开启；新账号不保存到本地账号库，跳过 Codex、套餐查询及注册后停留。推送失败仍丢弃凭证，只保留任务结果。",
+    },
+    {
+        "key": "PUSH_API_URL", "file": "push_to_api.py", "type": "str", "group": "账号推送",
+        "label": "推送 URL", "help": "填写 chatgpt2api 服务根地址或完整 /api/accounts 地址。",
+    },
+    {
+        "key": "PUSH_API_TOKEN", "file": "push_to_api.py", "type": "str", "group": "账号推送",
+        "label": "推送 Key", "help": "接收端管理员 Key，通过 Authorization: Bearer 发送。",
+        "storage": "env", "secret": True,
+    },
+    {
+        "key": "PUSH_API_TIMEOUT", "file": "push_to_api.py", "type": "int", "group": "账号推送",
+        "label": "推送超时(秒)", "help": "默认 15 秒。",
+    },
+    {
+        "key": "PUSH_API_VERIFY_TLS", "file": "push_to_api.py", "type": "bool", "group": "账号推送",
+        "label": "校验推送 TLS 证书", "help": "默认开启。",
+    },
     # ---- WebUI 授权 ----
     {
         "key": "WEBUI_AUTH_CODE", "file": "codex.py", "type": "str", "group": "WebUI 授权",
@@ -532,6 +553,35 @@ EDITABLE_FIELDS = [
         "external_label": "打开 Remail 官网",
     },
     {
+        "key": "REMAIL_ENABLED", "file": "remail.py", "type": "bool", "group": "邮箱 / OTP",
+        "label": "Remail 自动采购管理", "help": "沿用 register-deploy 的持久订单、幂等恢复、主邮箱和子地址分配。仍需选择 remail 邮箱来源。",
+    },
+    {
+        "key": "REMAIL_PURCHASE_BATCH_SIZE", "file": "remail.py", "type": "int", "group": "邮箱 / OTP",
+        "label": "Remail 补货数量", "help": "默认每次至少购买 4 个主邮箱，尚未使用的付费邮箱保留供后续任务使用。",
+    },
+    {
+        "key": "REMAIL_MAX_PURCHASE_PER_ROUND", "file": "remail.py", "type": "int", "group": "邮箱 / OTP",
+        "label": "Remail 单轮采购上限", "help": "默认 8 个。",
+    },
+    {
+        "key": "REMAIL_EXPECTED_UNIT_POINTS", "file": "remail.py", "type": "int", "group": "邮箱 / OTP",
+        "label": "Remail 参考单价(积分)", "help": "默认 10；采购按服务端实际成交价格结算。",
+    },
+    {
+        "key": "REMAIL_LOW_BALANCE_POINTS", "file": "remail.py", "type": "int", "group": "邮箱 / OTP",
+        "label": "Remail 低余额阈值", "help": "默认 200；低余额告警后继续采购。",
+    },
+    {
+        "key": "REMAIL_LOW_BALANCE_ALERT_INTERVAL_SECONDS", "file": "remail.py", "type": "int", "group": "邮箱 / OTP",
+        "label": "Remail 余额告警间隔(秒)", "help": "默认 600。",
+    },
+    {
+        "key": "REMAIL_FEISHU_WEBHOOK_URL", "file": "remail.py", "type": "str", "group": "邮箱 / OTP",
+        "label": "Remail 飞书告警地址", "help": "可选；接收采购异常和余额告警。",
+        "storage": "env", "secret": True,
+    },
+    {
         "key": "REMAIL_API_KEY", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
         "label": "Remail API Key", "help": "Remail 控制台生成的 rk- 开头 API Key；选择 remail 来源时必填，保存在 .env",
         "storage": "env", "secret": True,
@@ -550,11 +600,11 @@ EDITABLE_FIELDS = [
     },
     {
         "key": "REMAIL_SUPPLY_POLICY", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
-        "label": "Remail 库存策略", "help": "private_first 优先自有库存；public_only 只使用公开库存（默认）",
+        "label": "Remail 旧版库存策略", "help": "旧单笔客户端兼容项；自动采购管理固定使用公开库存 public_only。",
     },
     {
         "key": "REMAIL_ORDER_WAIT_SECONDS", "file": "email.py", "type": "int", "group": "邮箱 / OTP",
-        "label": "Remail 订单等待(秒)", "help": "下单后未立即返回 service token 时等待订单补齐凭证，默认 30 秒",
+        "label": "Remail 旧版订单等待(秒)", "help": "旧单笔客户端兼容项；自动采购管理按持久化采购意图恢复。",
     },
     {
         "key": "REMAIL_REQUEST_TIMEOUT", "file": "email.py", "type": "int", "group": "邮箱 / OTP",

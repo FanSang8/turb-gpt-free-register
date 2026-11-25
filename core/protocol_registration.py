@@ -22,8 +22,12 @@ def _mail_context(source: str, email: str) -> dict:
     return get_email_context_metadata(email, source)
 
 
-def checkpoint_registration_password(session, email: str, password: str) -> int:
+def checkpoint_registration_password(session, email: str, password: str) -> int | None:
     """user/register 确认后立即保存密码；取件失败也能恢复，不冒充已拿 token。"""
+    from core.registration_output import ephemeral_registration
+    if ephemeral_registration():
+        session._registration_password = password
+        return None
     from core import db
     from core.email_provider import resolve_email_source
     source = resolve_email_source(email)
@@ -40,6 +44,20 @@ def checkpoint_registration_password(session, email: str, password: str) -> int:
 def install_registration_checkpoint(session, email: str, session_info: dict,
                                     access_token: str, password: str | None):
     """在有 token 后持久化密码/secret，供独立 Codex 会话读取并避免中断丢失。"""
+    from core.registration_output import ephemeral_registration
+    if ephemeral_registration():
+        from core.email_provider import resolve_email_source
+        from core.registration_output import capture_account
+        capture_account(email=email, access_token=access_token,
+                        email_source=resolve_email_source(email), proxy_used=session.proxy or None)
+        if password:
+            session._registration_password = password
+        def memory_checkpoint(*, totp_secret=None, pending=None):
+            if totp_secret:
+                session._registration_totp_secret = totp_secret
+            session._pending_totp_enrollment = pending
+        session._registration_credential_checkpoint = memory_checkpoint
+        return memory_checkpoint
     from core import db
     from core.email_provider import resolve_email_source
     source = resolve_email_source(email)

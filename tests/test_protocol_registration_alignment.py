@@ -414,6 +414,8 @@ class RegistrationChainTests(unittest.TestCase):
     def setUp(self):
         stack = ExitStack()
         self.addCleanup(stack.close)
+        stack.enter_context(patch("config.push_to_api.REGISTER_PUSH_ONLY", False))
+        stack.enter_context(patch("config.push_to_api.PUSH_API_URL", ""))
         self.patches = {}
         for name in ('BrowserSession', 'human_delay', 'network_preflight', 'get_providers', 'get_csrf_token',
                      'signin_openai', 'follow_authorize', 'navigate_create_account_password',

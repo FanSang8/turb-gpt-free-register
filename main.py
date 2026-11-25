@@ -210,6 +210,38 @@ def run_registration(
     on_email_acquired: Callable[[str], None] | None = None,
     resume_registration: bool = False,
 ):
+    from core.registration_output import registration_output, deliver_registration
+    from core.push_to_api import validate_push_config
+    with registration_output() as output:
+        if output.ephemeral:
+            try:
+                validate_push_config()
+            except ValueError as exc:
+                return {"success": False, "email": email, "error": str(exc)}
+        try:
+            result = _run_registration(
+                email=email, name=name, birthday=birthday, proxy=proxy, otp_code=otp_code,
+                batch_dir=batch_dir, on_email_acquired=on_email_acquired,
+                resume_registration=resume_registration,
+            )
+        except Exception:
+            if not output.account:
+                raise
+            result = {"success": False, "email": output.account["email"],
+                      "error": "账号已生成，浏览器清理发生异常"}
+        return deliver_registration(result, output)
+
+
+def _run_registration(
+    email: str | None,
+    name: str,
+    birthday: str | None = None,
+    proxy: str = None,
+    otp_code: str = None,
+    batch_dir=None,
+    on_email_acquired: Callable[[str], None] | None = None,
+    resume_registration: bool = False,
+):
     """
     执行 ChatGPT 密码注册；已有账号按服务端状态恢复密码/OTP/MFA 登录。
 
@@ -647,8 +679,12 @@ def run_registration(
         codex_result = {"status": "skipped", "ok": False, "message": "未触发"}
         check_stop_requested()
         try:
-            from core.codex_oauth import run_codex_oauth
-            codex_result = run_codex_oauth(email)
+            from core.registration_output import ephemeral_registration
+            if ephemeral_registration():
+                codex_result = {"status": "skipped", "ok": True, "message": "注册推送模式"}
+            else:
+                from core.codex_oauth import run_codex_oauth
+                codex_result = run_codex_oauth(email)
         except StopRequested:
             raise
         except Exception as exc:
@@ -714,15 +750,17 @@ def run_registration(
             },
         )
 
-        logger.info(f"[完成] {email}，账号ID={account_id}，Token={access_token[:16]}...")
+        logger.info(f"[完成] {email}，账号ID={account_id}")
 
         # ==================== 阶段9: 后置自动触发 flow ====================
         # 只有走完回调、拿到 token 并保存成功的账号，才会触发 flow。
         # flow 请求不影响账号保存状态，但会记录结果并参与批量统计。
         flow_result = {"status": "skipped", "ok": False, "message": "未触发"}
         try:
-            from core.flow_trigger import trigger_flow
-            flow_result = trigger_flow(access_token)
+            from core.registration_output import ephemeral_registration
+            if not ephemeral_registration():
+                from core.flow_trigger import trigger_flow
+                flow_result = trigger_flow(access_token)
         except StopRequested:
             raise
         except Exception as exc:
@@ -741,7 +779,7 @@ def run_registration(
                 f"原因={flow_result.get('message')}"
             )
 
-        logger.debug(f"[完成] TOTP Secret: {totp_secret or '(未设置)'}")
+        logger.debug("[完成] 2FA 已设置: %s", bool(totp_secret))
 
         # 注册任务的成功判定：账号本身(注册+token)+Codex 授权都成功才算 success。
         # Codex 失败时账号仍保存（token 拿到了、有补跑机会），但任务状态标失败，
@@ -777,7 +815,13 @@ def run_registration(
                     )
                     logger.warning(f"[邮箱:{src}] {email} 账号已废弃，标记为 failed，不再重新注册")
                 elif credentials_saved or password_saved or resume_registration:
-                    logger.info("[注册] 已保存可恢复凭证，保留账号和邮箱状态供继续注册/补跑：%s", email)
+                    from core.registration_output import ephemeral_registration
+                    if ephemeral_registration():
+                        if not credentials_saved:
+                            release_email(email, status="failed", note="注册中断，临时凭证已释放")
+                        logger.info("[注册] 临时凭证交由推送收尾，不保存账号: %s", email)
+                    else:
+                        logger.info("[注册] 已保存可恢复凭证，保留账号和邮箱状态供继续注册/补跑：%s", email)
                 elif create_acknowledged:
                     src = release_email(
                         email, status="failed",
@@ -833,11 +877,11 @@ def main():
 
     if args.workers > 1:
         batch_dir = create_batch_archive_dir(args.count, args.workers)
-        logger.info("[批量] 账号数据将直接写入 SQLite")
+        logger.info("[批量] 注册完成后按配置推送")
         results = run_parallel_batch(args.count, args.workers, args.delay, args.continue_on_fail, batch_dir)
     else:
         batch_dir = create_batch_archive_dir(args.count, args.workers)
-        logger.info("[批量] 账号数据将直接写入 SQLite")
+        logger.info("[批量] 注册完成后按配置推送")
         results = run_serial_batch(args.count, args.delay, args.continue_on_fail, batch_dir)
 
     success_count = sum(1 for r in results if _is_success(r))
@@ -874,6 +918,9 @@ def main():
         and r["codex"].get("status") == "skipped"
     )
     logger.info(f"[批量] 完成：成功 {success_count} / 尝试 {len(results)} / 目标 {args.count}")
+    logger.info("[批量] 推送：成功 %s / 失败 %s",
+                sum(r.get("push", {}).get("status") == "success" for r in results),
+                sum(r.get("push", {}).get("status") == "failed" for r in results))
     if success_count:
         logger.info(
             f"[批量] Flow：成功 {flow_success_count} / 失败 {flow_failed_count} / 跳过 {flow_skipped_count}"

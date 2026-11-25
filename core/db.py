@@ -3532,6 +3532,10 @@ def update_job(
     account_id: int | None = None,
     network_traffic: dict | None = None,
     expected_statuses: tuple[str, ...] | None = None,
+    push: dict | None = None,
+    registration_success: bool | None = None,
+    mailbox_reservation_id: str | None = None,
+    email_source: str | None = None,
 ) -> bool:
     """索引定位原子读改写；可选状态 CAS，重复元数据更新不产生写入。"""
     with _LOCK:
@@ -3559,6 +3563,14 @@ def update_job(
                 row["account_id"] = account_id
             if network_traffic is not None:
                 row["network_traffic"] = dict(network_traffic)
+            if push is not None:
+                row["push"] = {key: push.get(key) for key in ("ok", "status", "message")}
+            if registration_success is not None:
+                row["registration_success"] = bool(registration_success)
+            if mailbox_reservation_id is not None:
+                row["mailbox_reservation_id"] = mailbox_reservation_id
+            if email_source is not None:
+                row["email_source"] = email_source
             if row == before:
                 return True
             row['updated_at'] = datetime.now().isoformat(timespec="microseconds")

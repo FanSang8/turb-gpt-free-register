@@ -901,11 +901,16 @@ def save_account_data(
     batch_dir: Path | None = None,
     auto_plan_check: bool | None = None,
     auto_twofa: bool | None = None,
-) -> int:
+) -> int | None:
     """
     将账号信息保存到 SQLite；output_path 仅为兼容旧调用方保留。
     返回新插入/更新的 row id。
     """
+    from core.registration_output import capture_account
+    if capture_account(email=email, access_token=access_token,
+                       email_source=email_source, proxy_used=proxy_used):
+        logger.info("[Save] 账号仅用于本次推送，不写入账号库: %s", email)
+        return None
     from core.db import insert_account
     extra = dict(extra or {})
     # 所有注册驱动共享邮箱恢复材料；按供应商决定是否需要专属凭证。

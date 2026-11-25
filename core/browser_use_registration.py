@@ -22,6 +22,7 @@ from typing import Any, Callable
 from config import browser_use as _cfg
 from config import twofa as _twofa_cfg
 from core.account_export import save_account_data, _post_register_dwell_seconds
+from core.registration_output import ephemeral_registration
 from core.browser_use_client import BrowserUseClient
 from core.email_provider import acquire_email_after_input, resolve_email_source, wait_for_otp
 from core.humanize import delay as human_delay
@@ -2825,7 +2826,7 @@ def run_browser_use_registration(
             }
             try:
                 from config import codex as _codex_cfg
-                codex_auto_enabled = bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False))
+                codex_auto_enabled = not ephemeral_registration() and bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False))
                 oauth_driver = str(getattr(_codex_cfg, "CODEX_OAUTH_DRIVER", "") or "").strip() or "same_as_registration"
                 if codex_auto_enabled:
                     logger.info(
@@ -2857,7 +2858,8 @@ def run_browser_use_registration(
                 }
 
             # 云端浏览器不采集本地流量明细；注册后停留仅用于完成页面流程。
-            _post_register_dwell(page, context, provider_prefix=provider_prefix, email=email)
+            if not ephemeral_registration():
+                _post_register_dwell(page, context, provider_prefix=provider_prefix, email=email)
             account_id = save_account_data(
                 email=email,
                 access_token=access_token,
