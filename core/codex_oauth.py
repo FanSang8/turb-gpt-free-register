@@ -1767,6 +1767,11 @@ def run_codex_oauth(
         oauth_driver = str(getattr(_codex_cfg, "CODEX_OAUTH_DRIVER", "protocol") or "protocol").strip().lower()
         if oauth_driver == "same_as_registration":
             oauth_driver = str(getattr(_roxy_cfg, "REGISTRATION_DRIVER", "protocol") or "protocol").strip().lower()
+        if oauth_driver == "camoufox":
+            return _codex_result(
+                status="failed", email=email,
+                message="Camoufox 暂不支持 Codex OAuth，请单独选择已支持的 Codex 授权驱动",
+            )
         if oauth_driver in ("roxy", "roxybrowser", "fingerprint", "browser"):
             from core.roxy_codex_oauth import run_roxy_codex_oauth
             return run_roxy_codex_oauth(email, otp_provider=otp_provider, proxy=proxy, force=True)

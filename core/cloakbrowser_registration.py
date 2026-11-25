@@ -37,6 +37,20 @@ def run_cloak_registration(
     on_email_acquired: Callable[[str], None] | None = None,
 ) -> dict:
     """CloakBrowser 自动化注册入口。"""
+    return run_browser_registration(
+        email, name, birthday, proxy, otp_code, batch_dir, on_email_acquired,
+        driver_builder=build_cloak_driver,
+        keep_browser_open=bool(_cfg.CLOAK_KEEP_BROWSER_OPEN),
+    )
+
+
+def run_browser_registration(
+    email, name, birthday, proxy=None, otp_code=None, batch_dir=None,
+    on_email_acquired=None, *, driver_builder, keep_browser_open=False,
+    label="Cloak", metadata_key="cloakbrowser", supports_codex=True,
+) -> dict:
+    """Shared page workflow; each invocation owns its driver and settings."""
+    prefix = f"[{label}注册]"
     driver = None
     opened = None
     create_acknowledged = False
@@ -45,20 +59,20 @@ def run_cloak_registration(
     data_saver: BrowserDataSaver | None = None
     network_traffic: dict | None = None
     try:
-        driver, opened = build_cloak_driver(proxy=proxy)
+        driver, opened = driver_builder(proxy=proxy)
         try:
-            traffic_tracker = PlaywrightTrafficTracker(driver.context, label="Cloak")
+            traffic_tracker = PlaywrightTrafficTracker(driver.context, label=label)
         except Exception as exc:
             # 统计失败不应影响注册主流程。
-            logger.warning("[Cloak注册] 初始化浏览器流量统计失败，继续注册：%s: %s", type(exc).__name__, str(exc)[:180])
-        data_saver = BrowserDataSaver(label="Cloak")
+            logger.warning("%s 初始化浏览器流量统计失败，继续注册：%s: %s", prefix, type(exc).__name__, str(exc)[:180])
+        data_saver = BrowserDataSaver(label=label)
         if traffic_tracker is not None:
             traffic_tracker.attach_data_saver(data_saver)
         data_saver.install_playwright(driver.context)
-        logger.info("[Cloak注册] 开始：%s，profile=%s", email, opened.profile_id)
+        logger.info("%s 开始：%s，profile=%s", prefix, email, opened.profile_id)
 
         otp_after_ts = time.time()
-        logger.info("[Cloak注册] 打开登录页：https://chatgpt.com/auth/login")
+        logger.info("%s 打开登录页：https://chatgpt.com/auth/login", prefix)
         driver.get("https://chatgpt.com/auth/login")
         human_delay("navigate")
         _maybe_accept(driver)
@@ -89,14 +103,15 @@ def run_cloak_registration(
         max_otp_attempts = 3
         for otp_attempt in range(1, max_otp_attempts + 1):
             if current_otp is None:
-                logger.info("[Cloak注册][OTP] 等待验证码：%s（第 %s/%s 次）", email, otp_attempt, max_otp_attempts)
+                logger.info("%s[OTP] 等待验证码：%s（第 %s/%s 次）", prefix, email, otp_attempt, max_otp_attempts)
                 try:
                     current_otp = wait_for_otp(email, after_ts=otp_after_ts)
                 except Exception as exc:
                     if otp_attempt >= max_otp_attempts:
                         raise
                     logger.warning(
-                        "[Cloak注册][OTP] 一直未收到验证码，点击“重新发送电子邮件”后继续等待（下一轮 %s/%s）：%s: %s",
+                        "%s[OTP] 一直未收到验证码，点击“重新发送电子邮件”后继续等待（下一轮 %s/%s）：%s: %s",
+                        prefix,
                         otp_attempt + 1,
                         max_otp_attempts,
                         type(exc).__name__,
@@ -107,14 +122,14 @@ def run_cloak_registration(
                     human_delay("api")
                     current_otp = None
                     continue
-            logger.info("[Cloak注册][OTP] 收到验证码：%s", current_otp)
+            logger.info("%s[OTP] 收到验证码：%s", prefix, current_otp)
             _clear_otp_inputs(driver)
             _type_otp(driver, current_otp)
             human_delay("otp_input")
             try:
                 _click_continue(driver)
             except Exception as exc:
-                logger.info("[Cloak注册][OTP] 未找到显式提交按钮，继续等待页面状态：%s", str(exc)[:120])
+                logger.info("%s[OTP] 未找到显式提交按钮，继续等待页面状态：%s", prefix, str(exc)[:120])
 
             outcome = _wait_after_email_otp_submit(driver, timeout=10)
             if outcome == "accepted":
@@ -133,10 +148,10 @@ def run_cloak_registration(
 
         session_info = _fetch_chatgpt_session(driver, timeout=120)
         access_token = session_info["accessToken"]
-        logger.info("[Cloak注册] 已拿到 accessToken：%s", email)
+        logger.info("%s 已拿到 accessToken：%s", prefix, email)
 
         if _twofa_cfg.ENABLE_2FA:
-            logger.warning("[Cloak注册] 当前 CloakBrowser 自动化路径暂不执行 2FA 设置，已跳过")
+            logger.warning("%s 当前浏览器路径暂不执行 2FA 设置，已跳过", prefix)
         totp_secret = None
 
         codex_result = {
@@ -146,9 +161,12 @@ def run_cloak_registration(
         }
         try:
             from config import codex as _codex_cfg
-            if not ephemeral_registration() and bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
+            if not supports_codex:
+                codex_result["message"] = f"{label} 暂不支持 Codex OAuth，已跳过"
+                logger.info("%s %s", prefix, codex_result["message"])
+            elif not ephemeral_registration() and bool(getattr(_codex_cfg, "ENABLE_CODEX_AUTO", False)):
                 from core.roxy_codex_oauth import run_roxy_codex_oauth
-                logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=True，复用当前 CloakBrowser 窗口执行 Codex 授权")
+                logger.info("%s[Codex] ENABLE_CODEX_AUTO=True，复用当前浏览器窗口执行 Codex 授权", prefix)
                 _check_manual_stop()
                 codex_result = run_roxy_codex_oauth(
                     email,
@@ -159,18 +177,21 @@ def run_cloak_registration(
                     clear_existing_state=True,
                 )
             else:
-                logger.info("[Cloak注册][Codex] ENABLE_CODEX_AUTO=False，注册后跳过 Codex OAuth")
+                logger.info("%s[Codex] 注册后跳过 Codex OAuth", prefix)
         except Exception as exc:
             codex_result = {"status": "failed", "ok": False, "message": f"{type(exc).__name__}: {str(exc)[:180]}"}
 
         # 统计注册浏览器关闭前的完整会话；注册后停留期间的网络请求也计入。
         if not ephemeral_registration():
-            post_register_dwell(email, label="Cloak注册")
+            post_register_dwell(email, label=f"{label}注册")
         if traffic_tracker is not None:
             network_traffic = traffic_tracker.stop()
-        network_traffic = merge_proxy_transport_traffic(network_traffic, driver.proxy_transport_snapshot(), label="Cloak")
+        network_traffic = merge_proxy_transport_traffic(network_traffic, driver.proxy_transport_snapshot(), label=label)
         if data_saver is not None:
-            data_saver.stop()
+            try:
+                data_saver.stop()
+            except Exception:
+                logger.debug("%s 停止省流量统计失败", prefix, exc_info=True)
         account_id = save_account_data(
             email=email,
             access_token=access_token,
@@ -182,7 +203,7 @@ def run_cloak_registration(
                 "user": session_info.get("user"),
                 "account": session_info.get("account"),
                 "expires": session_info.get("expires"),
-                "cloakbrowser": {"profile_id": opened.profile_id, "open_result": opened.raw},
+                metadata_key: {"profile_id": opened.profile_id, "open_result": opened.raw},
                 "registration_password": openai_password,
                 "codex": codex_result,
                 "network_traffic": network_traffic,
@@ -206,15 +227,18 @@ def run_cloak_registration(
             except Exception:
                 pass
         if driver is not None:
-            network_traffic = merge_proxy_transport_traffic(network_traffic, driver.proxy_transport_snapshot(), label="Cloak")
+            network_traffic = merge_proxy_transport_traffic(network_traffic, driver.proxy_transport_snapshot(), label=label)
         if data_saver is not None:
-            data_saver.stop()
-        logger.error("[Cloak注册] 失败：%s: %s", type(exc).__name__, exc)
-        logger.debug("[Cloak注册] 失败详情", exc_info=True)
+            try:
+                data_saver.stop()
+            except Exception:
+                logger.debug("%s 停止省流量统计失败", prefix, exc_info=True)
+        logger.error("%s 失败：%s: %s", prefix, type(exc).__name__, exc)
+        logger.debug("%s 失败详情", prefix, exc_info=True)
         try:
             if email:
                 from core.email_provider import release_email
-                release_email(email, status="failed" if create_acknowledged else "available", note=f"Cloak注册失败: {str(exc)[:180]}")
+                release_email(email, status="failed" if create_acknowledged else "available", note=f"{label}注册失败: {str(exc)[:180]}")
         except Exception:
             pass
         return {
@@ -230,8 +254,11 @@ def run_cloak_registration(
             except Exception:
                 pass
         if data_saver is not None:
-            data_saver.stop()
-        if driver and (ephemeral_registration() or not bool(_cfg.CLOAK_KEEP_BROWSER_OPEN)):
+            try:
+                data_saver.stop()
+            except Exception:
+                logger.debug("%s 停止省流量统计失败", prefix, exc_info=True)
+        if driver and (ephemeral_registration() or not keep_browser_open):
             try:
                 driver.quit()
             except Exception:

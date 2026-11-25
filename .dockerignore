@@ -1,0 +1,14 @@
+.git
+.venv
+.pytest_cache
+**/__pycache__
+*.sqlite3*
+.env
+.env.*
+!.env.example
+remail_state.json*
+cache
+logs
+run
+accounts
+codex_accounts

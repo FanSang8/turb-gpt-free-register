@@ -9,6 +9,7 @@ ChatGPT / OpenAI 账号自动注册与 Codex OAuth 授权工具。当前项目�
 - **protocol**：原纯协议注册，可选 `curl_cffi` / `wreq` + Sentinel/PoW。
 - **roxy**：RoxyBrowser 指纹浏览器 + Selenium 自动化注册，兼容新版页面流，例如 `create-account/password`、`about-you` 年龄/生日表单、地区本地化页面等。
 - **cloak**：CloakBrowser + Playwright 适配层自动化注册，支持免费 binary、无头模式、humanize、固定 fingerprint seed、代理 geoip。
+- **camoufox**：本地 Camoufox Firefox，支持无头/桌面、humanize、出口定位、代理池及代理池上游代理。
 - **browser_use**：Browser Use Cloud stealth Chromium + Playwright（可选住宅代理，无需本机安装 Roxy）。
 - **skyvern**：Skyvern Browser Sessions 云端浏览器 + Playwright CDP。
 
@@ -508,6 +509,27 @@ ROXY_CREATE_USE_PROXY_POOL = True
 ROXY_OPEN_HEADLESS = True
 ```
 
+
+#### 使用 Camoufox 注册
+
+安装 `requirements.txt` 后执行 `python -m camoufox fetch`，预先下载浏览器、
+GeoIP 数据库和指纹模型。WebUI「注册方式」选择 `Camoufox (Firefox)`，
+或设置 `.env` 的 `REGISTRATION_DRIVER="camoufox"`；默认仍使用原驱动。
+
+「Camoufox」设置支持 `CAMOUFOX_HEADLESS`、`CAMOUFOX_HUMANIZE`、
+`CAMOUFOX_GEOIP`、`CAMOUFOX_USE_PROXY`、`CAMOUFOX_LOCALE`、
+`CAMOUFOX_TIMEOUT` 和 `CAMOUFOX_KEEP_BROWSER_OPEN`。关闭无头后需要桌面/Xvfb。
+每个任务创建独立临时浏览器，不占 Roxy 环境额度；并发受服务器资源约束。
+代理从现有代理池获取，支持带认证的 HTTP/SOCKS5 及代理池上游代理；
+传入空字符串可显式直连，代理连接失败不会自动改为直连。
+
+复用现有页面、OTP、会话提取、账号推送、省流量和传输流量统计。
+本路径暂不执行 2FA 和 Codex OAuth，也不支持 Chromium CDP JS 覆盖率。
+需要单独授权 Codex 时，请选择已有的受支持驱动。
+仅推送模式无论是否勾选保留浏览器，任务结束都会关闭浏览器。
+
+服务器部署流程见 `deployment/README.md`：先提交推送 Git，再在服务器拉取
+确切提交构建镜像；保留原 `.env`、数据库、日志及 Roxy 登录数据。
 
 #### 使用 CloakBrowser 注册
 

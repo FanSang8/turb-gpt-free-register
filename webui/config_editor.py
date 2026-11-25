@@ -93,7 +93,15 @@ EDITABLE_FIELDS = [
     },
     {
         "key": "REGISTRATION_DRIVER", "file": "roxybrowser.py", "type": "str", "group": "注册方式",
-        "label": "注册驱动", "help": "默认推荐 roxy；protocol=纯协议，容易封号不建议；roxy=RoxyBrowser；cloak=CloakBrowser；browser_use=Browser Use Cloud+Playwright；skyvern=Skyvern Browser Sessions+Playwright",
+        "label": "注册驱动", "help": "roxy=RoxyBrowser；cloak=CloakBrowser；camoufox=本地 Firefox；protocol=纯协议；browser_use / skyvern=云浏览器",
+        "choices": [
+            {"value": "protocol", "label": "纯协议"},
+            {"value": "roxy", "label": "RoxyBrowser"},
+            {"value": "cloak", "label": "CloakBrowser"},
+            {"value": "camoufox", "label": "Camoufox (Firefox)"},
+            {"value": "browser_use", "label": "Browser Use"},
+            {"value": "skyvern", "label": "Skyvern"},
+        ],
     },
     {
         "key": "PROTOCOL_HTTP_CLIENT", "file": "browser.py", "type": "str", "group": "协议配置",
@@ -164,6 +172,36 @@ EDITABLE_FIELDS = [
     {
         "key": "CLOAK_KEEP_BROWSER_OPEN", "file": "cloakbrowser.py", "type": "bool", "group": "CloakBrowser",
         "label": "保留Cloak浏览器", "help": "调试时开启，任务结束后不自动关闭",
+    },
+
+    # ---- Camoufox ----
+    {
+        "key": "CAMOUFOX_HEADLESS", "file": "camoufox.py", "type": "bool", "group": "Camoufox",
+        "label": "Camoufox 无头", "help": "开启无头；关闭则在服务器桌面显示 Firefox 窗口",
+    },
+    {
+        "key": "CAMOUFOX_HUMANIZE", "file": "camoufox.py", "type": "bool", "group": "Camoufox",
+        "label": "Camoufox 人工行为", "help": "启用 Camoufox humanize",
+    },
+    {
+        "key": "CAMOUFOX_GEOIP", "file": "camoufox.py", "type": "bool", "group": "Camoufox",
+        "label": "Camoufox 按出口定位", "help": "通过当前代理出口匹配时区、语言及 WebRTC IP",
+    },
+    {
+        "key": "CAMOUFOX_USE_PROXY", "file": "camoufox.py", "type": "bool", "group": "Camoufox",
+        "label": "Camoufox 使用代理", "help": "使用传入代理或代理池，兼容代理池上游代理",
+    },
+    {
+        "key": "CAMOUFOX_LOCALE", "file": "camoufox.py", "type": "str", "group": "Camoufox",
+        "label": "Camoufox 语言", "help": "留空跟随出口定位；可填 en-US、ja-JP 等",
+    },
+    {
+        "key": "CAMOUFOX_TIMEOUT", "file": "camoufox.py", "type": "int", "group": "Camoufox",
+        "label": "Camoufox 超时(秒)", "help": "页面及元素操作的超时，默认 90 秒",
+    },
+    {
+        "key": "CAMOUFOX_KEEP_BROWSER_OPEN", "file": "camoufox.py", "type": "bool", "group": "Camoufox",
+        "label": "保留 Camoufox 浏览器", "help": "调试时不自动关闭；仅推送模式始终关闭",
     },
 
     # ---- Browser Use Cloud ----

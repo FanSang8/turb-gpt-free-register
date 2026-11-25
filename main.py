@@ -289,6 +289,17 @@ def _run_registration(
             batch_dir=batch_dir,
             on_email_acquired=on_email_acquired,
         )
+    if driver_mode == "camoufox":
+        from core.camoufox_registration import run_camoufox_registration
+        return run_camoufox_registration(
+            email=email,
+            name=name,
+            birthday=birthday or generate_random_birthday(),
+            proxy=proxy,
+            otp_code=otp_code,
+            batch_dir=batch_dir,
+            on_email_acquired=on_email_acquired,
+        )
     if driver_mode in ("browser_use", "browseruse", "browser-use", "bu"):
         from core.browser_use_registration import run_browser_use_registration
         return run_browser_use_registration(
@@ -313,7 +324,7 @@ def _run_registration(
         )
     if driver_mode not in ("protocol", "api", "http"):
         raise RuntimeError(
-            f"不支持的 REGISTRATION_DRIVER={driver_mode!r}，可选 protocol / roxy / cloak / browser_use / skyvern"
+            f"不支持的 REGISTRATION_DRIVER={driver_mode!r}，可选 protocol / roxy / cloak / camoufox / browser_use / skyvern"
         )
 
     from core.registration_service import StopRequested, check_stop_requested
