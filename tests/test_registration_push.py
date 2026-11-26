@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
+import runpy
 import threading
 
 import pytest
@@ -15,6 +16,7 @@ def delivery_config(monkeypatch):
     monkeypatch.setattr(cfg, "REGISTER_PUSH_ONLY", True)
     monkeypatch.setattr(cfg, "PUSH_API_URL", "https://receiver.example")
     monkeypatch.setattr(cfg, "PUSH_API_TOKEN", "test-admin-key")
+    monkeypatch.setattr(cfg, "PUSH_API_INCLUDE_PROXY", True)
 
 
 def response(body=None, status=200):
@@ -37,6 +39,58 @@ def test_push_contract(monkeypatch, url):
         "source_type": "outlook_external", "proxy": "http://proxy.example",
     }]}
     assert post.call_args.kwargs["verify"] is True
+
+
+@pytest.mark.parametrize("include_proxy", [False, True])
+@pytest.mark.parametrize("proxy", [None, "", "http://user:secret@proxy.example:8080",
+                                 "socks5h://user:secret@proxy.example:1080"])
+def test_push_proxy_only_exported_when_enabled(monkeypatch, include_proxy, proxy):
+    monkeypatch.setattr(cfg, "PUSH_API_INCLUDE_PROXY", include_proxy)
+    post = Mock(return_value=response())
+    monkeypatch.setattr(push_to_api.requests, "post", post)
+    assert push_to_api.push_account(email="x@example.com", access_token="test-token",
+                                   proxy_used=proxy)["ok"]
+    account = post.call_args.kwargs["json"]["accounts"][0]
+    if include_proxy and proxy:
+        assert account["proxy"] == proxy
+    else:
+        assert "proxy" not in account
+        assert "secret" not in str(post.call_args)
+
+
+@pytest.mark.parametrize("primary,alias,expected", [
+    (None, None, True), ("false", None, False), ("true", None, True),
+    (None, "false", False), ("true", "false", False), ("false", "true", True),
+])
+def test_push_proxy_environment_overrides(monkeypatch, primary, alias, expected):
+    from config import env_loader
+    monkeypatch.setattr(env_loader, "_LOADED", True)
+    for key, value in (("PUSH_API_INCLUDE_PROXY", primary),
+                       ("REGISTER_PUSH_API_INCLUDE_PROXY", alias)):
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+    settings = runpy.run_path(cfg.__file__)
+    assert settings["PUSH_API_INCLUDE_PROXY"] is expected
+
+
+def test_delivery_omits_proxy_without_changing_captured_proxy(monkeypatch):
+    monkeypatch.setattr(cfg, "PUSH_API_INCLUDE_PROXY", False)
+    monkeypatch.setattr("core.email_provider.release_email", Mock())
+    post = Mock(return_value=response())
+    monkeypatch.setattr(push_to_api.requests, "post", post)
+    proxy = "http://user:secret@proxy.example:8080"
+    with registration_output.registration_output() as output:
+        registration_output.capture_account(
+            email="x@example.com", access_token="test-token", email_source="remail", proxy_used=proxy)
+        result = registration_output.deliver_registration({"success": True}, output)
+        assert output.account["proxy_used"] == proxy
+    assert result["success"] is True
+    assert post.call_args.kwargs["json"] == {"accounts": [{
+        "email": "x@example.com", "access_token": "test-token", "type": "free",
+        "source_type": "outlook_external",
+    }]}
 
 
 @pytest.mark.parametrize("body,status", [({"errors": ["invalid"]}, 200), ({"added": 0}, 200),
@@ -198,7 +252,27 @@ def test_webui_blocks_jobs_before_purchasing_and_exposes_push_settings(monkeypat
     fields = {field["key"]: field for field in client.get("/api/config", headers=headers).json}
     assert fields["PUSH_API_TOKEN"]["secret"] is True
     assert fields["REGISTER_PUSH_ONLY"]["value"] is True
+    assert fields["PUSH_API_INCLUDE_PROXY"]["type"] == "bool"
+    assert fields["PUSH_API_INCLUDE_PROXY"]["group"] == "账号推送"
     assert "REMAIL_PURCHASE_BATCH_SIZE" in fields
+
+
+def test_push_proxy_setting_saved_by_webui_config_editor(tmp_path, monkeypatch):
+    from config import env_loader
+    from webui import config_editor
+    path = tmp_path / ".env"
+    path.write_text('PROXY_POOL="http://user:secret@proxy.example:8080"\n', encoding="utf-8")
+    monkeypatch.setattr(env_loader, "_ENV_PATH", path)
+    monkeypatch.setenv("PUSH_API_INCLUDE_PROXY", "true")
+    monkeypatch.setenv("PROXY_POOL", "http://user:secret@proxy.example:8080")
+    monkeypatch.delenv("REGISTER_PUSH_API_INCLUDE_PROXY", raising=False)
+    result = config_editor.update_config({"PUSH_API_INCLUDE_PROXY": False})
+    assert result["updated"] == ["PUSH_API_INCLUDE_PROXY"]
+    assert env_loader.read_env_file()["PUSH_API_INCLUDE_PROXY"] == "False"
+    assert env_loader.read_env_file()["PROXY_POOL"] == "http://user:secret@proxy.example:8080"
+    assert runpy.run_path(cfg.__file__)["PUSH_API_INCLUDE_PROXY"] is False
+    fields = {field["key"]: field for field in config_editor.get_config()}
+    assert fields["PUSH_API_INCLUDE_PROXY"]["value"] is False
 
 
 def test_job_history_persists_only_delivery_metadata(tmp_path, monkeypatch):

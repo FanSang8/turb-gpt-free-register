@@ -58,7 +58,7 @@ def push_account(
         "type": "free",
         "source_type": str(source_type or "web").strip() or "web",
     }
-    if proxy_used:
+    if proxy_used and _cfg.PUSH_API_INCLUDE_PROXY:
         account["proxy"] = proxy_used
     payload = {"accounts": [account]}
     try:

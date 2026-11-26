@@ -55,6 +55,10 @@ EDITABLE_FIELDS = [
         "key": "PUSH_API_VERIFY_TLS", "file": "push_to_api.py", "type": "bool", "group": "账号推送",
         "label": "校验推送 TLS 证书", "help": "默认开启。",
     },
+    {
+        "key": "PUSH_API_INCLUDE_PROXY", "file": "push_to_api.py", "type": "bool", "group": "账号推送",
+        "label": "推送携带代理", "help": "默认开启以兼容旧配置；关闭后推送账号时完全省略 proxy 字段，不影响注册浏览器使用代理。",
+    },
     # ---- WebUI 授权 ----
     {
         "key": "WEBUI_AUTH_CODE", "file": "codex.py", "type": "str", "group": "WebUI 授权",

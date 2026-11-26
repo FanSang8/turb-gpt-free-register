@@ -12,6 +12,7 @@ PUSH_API_URL=https://your-chatgpt2api.example
 PUSH_API_TOKEN=your-admin-key
 PUSH_API_TIMEOUT=15
 PUSH_API_VERIFY_TLS=true
+PUSH_API_INCLUDE_PROXY=false
 ```
 
 URL 可填写根地址或完整 `/api/accounts` 地址。兼容参考项目的
@@ -24,7 +25,11 @@ URL 可填写根地址或完整 `/api/accounts` 地址。兼容参考项目的
 {"accounts":[{"email":"example@outlook.com","access_token":"...","type":"free","source_type":"outlook_external"}]}
 ```
 
-非 Remail 来源为 `source_type=web`。注册代理存在时增加 `proxy` 字段。
+非 Remail 来源为 `source_type=web`。`PUSH_API_INCLUDE_PROXY` 默认 `true`，
+兼容原有行为：注册代理存在时增加 `proxy` 字段。设为 `false`，或在
+WebUI“账号推送”关闭“推送携带代理”，推送时会完全省略 `proxy` 字段，
+包括代理地址和认证信息。此开关不改变注册浏览器的代理配置或当前代理池。
+也支持 `REGISTER_PUSH_API_INCLUDE_PROXY` 环境变量；同时配置时该别名优先。
 任务列表分别显示任务结果和推送结果。推送失败时不会重新注册同一邮箱，
 也不将凭证写入失败队列；本次凭证在请求结束后释放，无法跨进程重推。
 未配置有效 URL 时直接拒绝开始注册，不消耗邮箱订单。

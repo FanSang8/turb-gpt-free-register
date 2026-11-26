@@ -656,6 +656,13 @@ PROXY_POOL = [
 
 Roxy 一号一环境开启 `ROXY_CREATE_USE_PROXY_POOL=True` 时，会从这里随机取代理写入 Roxy Profile。
 
+Camoufox 开启 `CAMOUFOX_USE_PROXY=True` 时使用同一代理池，支持带认证的
+HTTP/SOCKS5 代理入口。代理商提供网关地址时可按上述 URL 格式填写；
+IP 轮换和会话保持取决于代理商，程序不会把“提取 IP 的 API 链接”当成代理服务使用。
+账号推送与浏览器代理配置独立：在“账号推送”关闭“推送携带代理”
+（`PUSH_API_INCLUDE_PROXY=false`），接收端的账号 JSON 就不包含 `proxy` 字段，
+注册浏览器仍按当前代理池配置连接。详见 [账号推送配置](docs/registration-push.md)。
+
 ---
 
 ### 4. 配置 Codex OAuth
